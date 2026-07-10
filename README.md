@@ -1,27 +1,77 @@
-# Telegram Flue Bot
+# Flue Telegram Bot
 
-A local-first Telegram assistant built with Flue, Telegram webhooks, and OpenCode Go's DeepSeek V4 Pro.
+A Telegram AI assistant built with [Flue](https://flueframework.com/), OpenCode Go, and DeepSeek V4 Pro.
 
-## Setup
+## Requirements
+
+- Node.js 22.19+
+- Telegram bot token from [@BotFather](https://t.me/BotFather)
+- OpenCode Go API key
+- A public HTTPS endpoint for Telegram webhooks
+
+## Local setup
 
 ```bash
+npm install
 cp .env.example .env
-# Fill in OPENCODE_API_KEY, TELEGRAM_BOT_TOKEN, and TELEGRAM_WEBHOOK_SECRET_TOKEN
+```
+
+Set these values in `.env`:
+
+```env
+OPENCODE_API_KEY="..."
+TELEGRAM_BOT_TOKEN="..."
+TELEGRAM_WEBHOOK_SECRET_TOKEN="..."
+TELEGRAM_OWNER_USER_ID="..."
+```
+
+Start the development server:
+
+```bash
 npx flue dev --target node
 ```
 
-The local server listens at `http://localhost:3583`. Telegram webhooks require a public HTTPS URL; use a tunnel such as ngrok or Cloudflare Tunnel, then set:
+The server listens on `http://localhost:3583`.
+
+## Tailscale Funnel
+
+Expose the local server:
+
+```bash
+tailscale funnel --bg 3583
+```
+
+Set the Telegram webhook using the public Funnel hostname:
 
 ```bash
 curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
   -H 'Content-Type: application/json' \
-  -d '{"url":"https://YOUR_PUBLIC_HOST/channels/telegram/webhook","secret_token":"'"$TELEGRAM_WEBHOOK_SECRET_TOKEN"'"}'
+  -d '{"url":"https://YOUR_TAILSCALE_HOST/channels/telegram/webhook","secret_token":"'"$TELEGRAM_WEBHOOK_SECRET_TOKEN"'"}'
 ```
 
-To test the agent without Telegram:
+## Group approval
+
+Anyone can add the bot to a group, but unapproved groups are ignored. The configured owner can approve a group by sending:
+
+```text
+@laravel_myanmar_bot approve
+```
+
+Approved groups respond only to mentions, commands, and replies to the bot. Approved group IDs are stored locally in `data/approved-chats.json`.
+
+## System prompt
+
+The assistant instructions are stored locally in:
+
+```text
+src/agents/telegram-assistant.md
+```
+
+This file is intentionally gitignored because it may contain private instructions.
+
+## Validation
 
 ```bash
-npx flue run telegram-assistant --target node --input '{"message":"Say hello"}'
+npx tsc --noEmit
+npx flue build --target node
 ```
-
-# flue-telegram-bot
