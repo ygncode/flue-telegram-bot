@@ -23,3 +23,5 @@ To test the agent without Telegram:
 ```bash
 npx flue run telegram-assistant --target node --input '{"message":"Say hello"}'
 ```
+
+# flue-telegram-bot
