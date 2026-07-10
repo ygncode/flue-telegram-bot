@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "flue-telegram-bot",
+  "compatibility_date": "2026-07-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "kv_namespaces": [
+    {
+      "binding": "APPROVED_CHATS",
+      "id": "cffee9f99c3b480c900ad76fdb95434c"
+    }
+  ],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["FlueRegistry", "FlueTelegramAssistantAgent"]
+    }
+  ]
+}

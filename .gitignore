@@ -1,5 +1,8 @@
 node_modules/
 dist/
 data/
+.wrangler/
+.flue-vite/
+.flue-vite.wrangler.jsonc
 .env
 src/agents/telegram-assistant.md

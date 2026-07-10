@@ -4,14 +4,22 @@ import { Api } from 'grammy';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Message } from 'grammy/types';
+import type { Env } from 'hono';
+import type { KVNamespace } from '@cloudflare/workers-types';
 import * as v from 'valibot';
 import assistant from '../agents/telegram-assistant.ts';
 
 export const client = new Api(process.env.TELEGRAM_BOT_TOKEN!);
 
-export const channel = createTelegramChannel({
+type AppEnv = Env & {
+  Bindings: {
+    APPROVED_CHATS?: KVNamespace;
+  };
+};
+
+export const channel = createTelegramChannel<AppEnv>({
   secretToken: process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN!,
-  async webhook({ update }) {
+  async webhook({ c, update }) {
     const incoming = update.message ?? update.channel_post ?? update.business_message;
     if (!incoming) return;
 
@@ -19,7 +27,7 @@ export const channel = createTelegramChannel({
 
     if (incoming.chat.type !== 'private') {
       if (isApprovalRequest(incoming) && isOwner(incoming)) {
-        approveChat(incoming.chat.id);
+        await approveChat(incoming.chat.id, c.env.APPROVED_CHATS);
         await client.sendMessage(incoming.chat.id, '✅ This group is approved. Mention me or reply to me to use the bot.', {
           ...(incoming.message_thread_id
             ? { message_thread_id: incoming.message_thread_id }
@@ -29,7 +37,7 @@ export const channel = createTelegramChannel({
       }
 
       // Unapproved groups can add the bot, but it ignores everything else.
-      if (!isApprovedChat(incoming.chat.id)) return;
+      if (!(await isApprovedChat(incoming.chat.id, c.env.APPROVED_CHATS))) return;
 
       // Approved groups only handle mentions, commands, and replies.
       if (!shouldHandleGroupMessage(incoming)) return;
@@ -76,11 +84,17 @@ function approvedChats(): Set<string> {
   }
 }
 
-function isApprovedChat(chatId: number): boolean {
+async function isApprovedChat(chatId: number, kv?: KVNamespace): Promise<boolean> {
+  if (kv) return (await kv.get(`approved:${chatId}`)) === '1';
   return approvedChats().has(String(chatId));
 }
 
-function approveChat(chatId: number): void {
+async function approveChat(chatId: number, kv?: KVNamespace): Promise<void> {
+  if (kv) {
+    await kv.put(`approved:${chatId}`, '1');
+    return;
+  }
+
   const chats = approvedChats();
   chats.add(String(chatId));
   mkdirSync(dataPath, { recursive: true });
