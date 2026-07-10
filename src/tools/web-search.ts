@@ -12,7 +12,7 @@ export const webSearch = defineTool({
     const apiKey = process.env.JINA_API_KEY;
     if (!apiKey) return { error: 'Web search is not configured.' };
 
-    const response = await fetch('https://s.jina.ai/', {
+    const jina = await fetch('https://s.jina.ai/', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -25,10 +25,34 @@ export const webSearch = defineTool({
       signal,
     });
 
-    if (!response.ok) {
-      return { error: `Jina search failed with HTTP ${response.status}.` };
+    if (jina.ok) return await jina.json();
+
+    const braveKey = process.env.BRAVE_SEARCH_API_KEY;
+    if (!braveKey) return { error: `Jina search failed with HTTP ${jina.status}.` };
+
+    const braveUrl = new URL('https://api.search.brave.com/res/v1/web/search');
+    braveUrl.searchParams.set('q', input.query);
+    braveUrl.searchParams.set('count', '5');
+    const brave = await fetch(braveUrl, {
+      headers: {
+        Accept: 'application/json',
+        'X-Subscription-Token': braveKey,
+      },
+      signal,
+    });
+
+    if (!brave.ok) {
+      return {
+        error: `Search providers failed (Jina HTTP ${jina.status}, Brave HTTP ${brave.status}).`,
+      };
     }
 
-    return await response.json();
+    const data = (await brave.json()) as {
+      web?: { results?: Array<{ title?: string; url?: string; description?: string }> };
+    };
+    return {
+      provider: 'brave',
+      results: data.web?.results ?? [],
+    };
   },
 });
