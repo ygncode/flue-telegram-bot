@@ -12,9 +12,10 @@ export const client = new Api(process.env.TELEGRAM_BOT_TOKEN!);
 export const channel = createTelegramChannel({
   secretToken: process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN!,
   async webhook({ update }) {
-    console.log('[telegram] update received', update.update_id, Object.keys(update));
     const incoming = update.message ?? update.channel_post ?? update.business_message;
     if (!incoming) return;
+
+    if (incoming.chat.type === 'private' && !isOwner(incoming)) return;
 
     if (incoming.chat.type !== 'private') {
       if (isApprovalRequest(incoming) && isOwner(incoming)) {
@@ -34,14 +35,27 @@ export const channel = createTelegramChannel({
       if (!shouldHandleGroupMessage(incoming)) return;
     }
 
-    await dispatch(assistant, {
-      id: channel.conversationKey(conversationFromMessage(incoming)),
-      input: {
-        type: 'telegram.message',
-        updateId: update.update_id,
-        message: incoming,
-      },
-    });
+    const typingOptions =
+      incoming.message_thread_id === undefined
+        ? {}
+        : { message_thread_id: incoming.message_thread_id };
+    await client.sendChatAction(incoming.chat.id, 'typing', typingOptions);
+    const typingInterval = setInterval(() => {
+      void client.sendChatAction(incoming.chat.id, 'typing', typingOptions).catch(() => {});
+    }, 4_000);
+
+    try {
+      await dispatch(assistant, {
+        id: channel.conversationKey(conversationFromMessage(incoming)),
+        input: {
+          type: 'telegram.message',
+          updateId: update.update_id,
+          message: incoming,
+        },
+      });
+    } finally {
+      clearInterval(typingInterval);
+    }
   },
 });
 
@@ -110,10 +124,12 @@ function conversationFromMessage(message: Message): TelegramConversationRef {
 export function postMessage(ref: TelegramConversationRef) {
   return defineTool({
     name: 'post_telegram_message',
-    description: 'Send a text reply to the current Telegram conversation.',
+    description:
+      'Send a text reply to the current Telegram conversation. Text is parsed as Telegram HTML (use <b>, <i>, <code>, <pre>, <a>; escape literal &, <, > as entities).',
     input: v.object({ text: v.pipe(v.string(), v.minLength(1)) }),
     async run({ input: { text } }) {
       const message = await client.sendMessage(ref.chatId, text, {
+        parse_mode: 'HTML',
         ...(ref.type === 'business-chat'
           ? { business_connection_id: ref.businessConnectionId }
           : {}),
